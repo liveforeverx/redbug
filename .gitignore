@@ -1,0 +1,7 @@
+*.beam
+/ebin/*.app
+/tetrapak/.local.cache
+*.*~
+*.config
+*.log
+/test-log/

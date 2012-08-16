@@ -1,0 +1,10 @@
+{application, redbug,
+ [
+  {description, "Erlang Debugging Tool"},
+  {vsn, "0.60"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]}
+ ]}.
