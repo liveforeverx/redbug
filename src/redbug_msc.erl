@@ -57,22 +57,24 @@ gd_fun({Op,V1,V2},{Vars,O}) ->               % binary
   {Vars,[{Op,unpack_var(V1,Vars),unpack_var(V2,Vars)}|O]}.
 
 unpack_op(Op,As,Vars) ->
-  list_to_tuple([Op|[unpack_var(A,Vars)||A<-As]]).
+    list_to_tuple([Op|[unpack_var(A,Vars)||A<-As]]).
 
 unpack_var({tuple,Es},Vars) ->
-  {list_to_tuple([unpack_var(E,Vars)||E<-Es])};
+    {list_to_tuple([unpack_var(E,Vars)||E<-Es])};
 unpack_var({list,Es},Vars) ->
-  [unpack_var(E,Vars)||E<-Es];
+    [unpack_var(E,Vars)||E<-Es];
 unpack_var({var,Var},Vars) ->
-  case proplists:get_value(Var,Vars) of
-    undefined -> exit({unbound_variable,Var});
-    V -> V
-  end;
+    case proplists:get_value(Var,Vars) of
+        undefined -> exit({unbound_variable,Var});
+        V -> V
+    end;
 unpack_var({Op,As},Vars) when is_list(As) ->
-  unpack_op(Op,As,Vars);
+    unpack_op(Op,As,Vars);
+unpack_var({Op, V1, V2},Vars) ->
+    unpack_op(Op, [V1, V2], Vars);
 unpack_var({Type,Val},_) ->
-  assert_type(Type,Val),
-  Val.
+    assert_type(Type,Val),
+    Val.
 
 compile_args('_') ->
   {[{'$_','$_'}],'_'};
@@ -145,8 +147,8 @@ split_fun(Str) ->
       % strip off the guards, if any
       {S,Guard} =
         case re:run(St,"^(.+[\\s)])+when\\s(.+)\$",[{capture,[1,2],list}]) of
-          {match,[Y,G]} -> {Y,G};
-          nomatch       -> {St,""}
+          {match,[Y,G]} -> {Y, G};
+          nomatch       -> {St, ""}
         end,
       % add a wildcard F, if Body is just an atom (presumably a module)
       Body =
