@@ -10,9 +10,10 @@
 -author('Mats Cronqvist').
 
 -export([transform/1]).
--export([unit/0,unit_quiet/0]).
+-export([unit_loud/0,unit_quiet/0]).
 
--define(is_string(Str), (Str=="" orelse (9=<hd(Str) andalso hd(Str)=<255))).
+-define(is_string(Str),
+        (Str=="" orelse (9=<hd(Str) andalso hd(Str)=<255))).
 
 transform(E) ->
   compile(parse(to_string(E))).
@@ -57,24 +58,24 @@ gd_fun({Op,V1,V2},{Vars,O}) ->               % binary
   {Vars,[{Op,unpack_var(V1,Vars),unpack_var(V2,Vars)}|O]}.
 
 unpack_op(Op,As,Vars) ->
-    list_to_tuple([Op|[unpack_var(A,Vars)||A<-As]]).
+  list_to_tuple([Op|[unpack_var(A,Vars)||A<-As]]).
 
 unpack_var({tuple,Es},Vars) ->
-    {list_to_tuple([unpack_var(E,Vars)||E<-Es])};
+  {list_to_tuple([unpack_var(E,Vars)||E<-Es])};
 unpack_var({list,Es},Vars) ->
-    [unpack_var(E,Vars)||E<-Es];
+  [unpack_var(E,Vars)||E<-Es];
 unpack_var({var,Var},Vars) ->
-    case proplists:get_value(Var,Vars) of
-        undefined -> exit({unbound_variable,Var});
-        V -> V
-    end;
+  case proplists:get_value(Var,Vars) of
+    undefined -> exit({unbound_variable,Var});
+    V -> V
+  end;
 unpack_var({Op,As},Vars) when is_list(As) ->
-    unpack_op(Op,As,Vars);
-unpack_var({Op, V1, V2},Vars) ->
-    unpack_op(Op, [V1, V2], Vars);
+  unpack_op(Op,As,Vars);
+unpack_var({Op,V1,V2},Vars) ->
+  unpack_op(Op,[V1,V2],Vars);
 unpack_var({Type,Val},_) ->
-    assert_type(Type,Val),
-    Val.
+  assert_type(Type,Val),
+  Val.
 
 compile_args('_') ->
   {[{'$_','$_'}],'_'};
@@ -147,8 +148,8 @@ split_fun(Str) ->
       % strip off the guards, if any
       {S,Guard} =
         case re:run(St,"^(.+[\\s)])+when\\s(.+)\$",[{capture,[1,2],list}]) of
-          {match,[Y,G]} -> {Y, G};
-          nomatch       -> {St, ""}
+          {match,[Y,G]} -> {Y,G};
+          nomatch       -> {St,""}
         end,
       % add a wildcard F, if Body is just an atom (presumably a module)
       Body =
@@ -188,10 +189,14 @@ guards_fun(Str) ->
         "" -> [];
         _ ->
           {done,{ok,Toks,1},[]} = erl_scan:tokens([],Str++". ",1),
-          {ok,Guards} = erl_parse:parse_exprs(Toks),
+          {ok,Guards} = erl_parse:parse_exprs(disjunct_guard(Toks)),
           [guard(G)||G<-Guards]
       end
   end.
+
+%% deal with disjunct guards by replacing ';' with 'orelse'
+disjunct_guard(Toks) ->
+  [case T of {';',1} -> {'orelse',1}; _ -> T end||T<-Toks].
 
 guard({call,1,{atom,1,G},Args}) -> {G,[arg(A) || A<-Args]};   % function
 guard({op,1,Op,One,Two})        -> {Op,guard(One),guard(Two)};% unary op
@@ -221,7 +226,8 @@ actions_fun(Str) ->
 assert(Fun,Tag) ->
   try Fun()
   catch
-    _:{_,{error,{1,erl_parse,L}}}-> exit({{syntax_error,lists:flatten(L)},Tag});
+    _:{this_is_too_confusing,C}  -> exit({syntax_error,{C,Tag}});
+    _:{_,{error,{1,erl_parse,L}}}-> exit({syntax_error,{lists:flatten(L),Tag}});
     _:R                          -> exit({R,Tag,erlang:get_stacktrace()})
   end.
 
@@ -229,12 +235,15 @@ assert(Fun,Tag) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% ad-hoc unit testing
 
+unit_loud() ->
+  lists:foreach(fun(R)->io:fwrite("~p~n",[R])end,unit()).
+
 unit_quiet() ->
   [R||R<-unit(),is_tuple(R)].
 
 unit() ->
   lists:foldr(
-    fun(Str,O)->[unit(fun transform/1,Str)|O]end,[],
+    fun(Str,O)->[unit(Str)|O]end,[],
     [{"a when element(1,'$_')=/=b",
       {{a,'_','_'},
        [{'_',[{'=/=',{element,1,'$_'},b}],[]}],[local]}}
@@ -245,8 +254,6 @@ unit() ->
      ,{"a:b when element(1,'$_')=/=c",
        {{a,b,'_'},
         [{'_',[{'=/=',{element,1,'$_'},c}],[]}],[local]}}
-     ,{"a",
-       {{a,'_','_'},[{'_',[],[]}],[local]}}
      ,{"a",
        {{a,'_','_'},[{'_',[],[]}],[local]}}
      ,{"a->stack",
@@ -284,9 +291,22 @@ unit() ->
      ,{"x:c([string])",
        {{x,c,1},[{[[string]],[],[]}],[local]}}
      ,{"x(s)",
-       this_is_too_confusing}
+       syntax_error}
+     ,{"x-s",
+       syntax_error}
      ,{"x:c(S)when S==x;S==y",
-       {syntax_error,"syntax error before: S"}}
+       {{x,c,1},
+        [{['$1'],[{'orelse',{'==','$1',x},{'==','$1',y}}],[]}],
+        [local]}}
+     ,{"x:c(S)when (S==x)or(S==y)",
+       {{x,c,1},
+        [{['$1'],[{'or',{'==','$1',x},{'==','$1',y}}],[]}],
+        [local]}}
+     ,{"a:b(X,Y)when is_record(X,rec) and (Y==0), (X==z)",
+       {{a,b,2},
+        [{['$1','$2'],
+          [{'and',{is_record,'$1',rec},{'==','$2',0}},{'==','$1',z}],[]}],
+        [local]}}
      ,{"x:y(z)->bla",
        unknown_action}
      ,{"a:b(X,y)when not is_atom(X)",
@@ -361,10 +381,11 @@ unit() ->
         [global]}}
     ]).
 
-unit(Method,{Str,MS}) ->
-  try MS=Method(Str),Str
+unit({Str,MS}) ->
+  try MS=transform(Str),Str
   catch
     _:{MS,_}       -> Str;
+    _:{{MS,_},_}   -> Str;
     _:{{MS,_},_,_} -> Str;
     _:R            -> {Str,R,MS}
   end.
