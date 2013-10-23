@@ -242,7 +242,7 @@ consumer_ip(Port,QueueSize,Time) ->
 %%%    timeout
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init_local_port(Conf) ->
-  erlang:start_timer(fetch(time,Conf),self(),fetch(daddy,Conf)),
+  start_timer(fetch(time,Conf),self(),fetch(daddy,Conf)),
   Port = mk_port(Conf),
   loop_local_port(store(port,Port,Conf)).
 
@@ -285,7 +285,7 @@ mk_port(Conf) ->
 -record(ld,{daddy,where,count,maxqueue,maxsize}).
 
 init_local_pid(Conf) ->
-  erlang:start_timer(fetch(time,Conf),self(),fetch(daddy,Conf)),
+  start_timer(fetch(time,Conf),self(),fetch(daddy,Conf)),
   loop_lp({#ld{daddy=fetch(daddy,Conf),
                where=fetch(where,Conf),
                maxsize=fetch(maxsize,Conf),
@@ -396,3 +396,7 @@ pi({R,Node}) when is_atom(R), is_atom(Node) -> {R,Node}.
 ts(Nw) ->
   {_,{H,M,S}} = calendar:now_to_local_time(Nw),
   {H,M,S,element(3,Nw)}.
+
+start_timer(infinity, _Pid, _Msg) -> no_timer;
+start_timer(Time, Pid, Msg) ->
+  erlang:start_timer(Time, Pid, Msg).

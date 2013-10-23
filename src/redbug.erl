@@ -452,6 +452,7 @@ conf_term(Cnf) ->
 maybe_arity(#cnf{arity=true},Flags) -> [arity|Flags];
 maybe_arity(_,Flags)                -> Flags.
 
+chk_time(infinity) -> infinity;
 chk_time(Time) when is_integer(Time) -> Time;
 chk_time(X) -> throw({bad_time,X}).
 
